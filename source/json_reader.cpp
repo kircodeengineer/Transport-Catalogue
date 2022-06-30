@@ -1,5 +1,4 @@
 #include "json_reader.h"
-#include "json_builder.h"
 
 /*
  * Здесь можно разместить код наполнения транспортного справочника данными из JSON,
@@ -63,6 +62,7 @@ void JsonReader::ProcessInputRouteRequest(const std::list<size_t>& route_request
 			route_name.reserve(sizeof(route_name) + 1);
 			route_data.name = std::move(route_name);
 			const auto& stops_ = request_map.at("stops").AsArray();
+			// добавление остановок в маршрут
 			for (const auto& stop_node : stops_) {
 				const auto& stop_name = stop_node.AsString();
 				const auto& stop = request_handler.GetStopStat(stop_name);
@@ -180,6 +180,113 @@ void JsonReader::ProcessInputRequests() {
 	ProcessRoutingSettings();
 }
 
+void JsonReader::ProcessBusStatRequest(json::Builder& node, const json::Dict& request) {
+	using namespace std::literals;
+	const auto& request_id = request.at("id"s).AsInt();
+	std::string name = request.at("name"s).AsString();
+	auto route_data = request_handler.GetBusStat(name);
+	if (route_data != std::nullopt) {
+		json::Node value_node{ json::Builder{}.StartDict()
+				.Key("request_id"s).Value(request_id)
+				.Key("curvature"s).Value((*route_data)->curvature)
+				.Key("route_length"s).Value((*route_data)->length)
+				.Key("stop_count"s).Value(static_cast<int>((*route_data)->stops_count))
+				.Key("unique_stop_count"s).Value(static_cast<int>((*route_data)->unique_stops_count))
+				.EndDict().Build() };
+		node.Value(value_node);
+	}
+	else {
+		json::Node value_node{ json::Builder{}.StartDict()
+					.Key("request_id"s).Value(request_id)
+					.Key("error_message"s).Value("not found"s)
+					.EndDict().Build() };
+		node.Value(value_node);
+	}
+}
+
+void JsonReader::ProcessStopStatRequest(json::Builder& node, const json::Dict& request) {
+	using namespace std::literals;
+	const auto& request_id = request.at("id"s).AsInt();
+	std::string name = request.at("name"s).AsString();
+	const auto& stop_data = request_handler.GetStopStat(name);
+	if (stop_data != std::nullopt) {
+		json::Array routes;
+		for (const auto& route_data : **request_handler.GetBusesByStop((*stop_data)->name)) {
+			routes.push_back(route_data->name);
+		}
+		json::Node value_node{ json::Builder{}.StartDict()
+					.Key("request_id"s).Value(request_id)
+					.Key("buses"s).Value(routes)
+					.EndDict().Build() };
+		node.Value(value_node);
+	}
+	else {
+		json::Node value_node{ json::Builder{}.StartDict()
+					.Key("request_id"s).Value(request_id)
+					.Key("error_message"s).Value("not found"s)
+					.EndDict().Build() };
+		node.Value(value_node);
+	}
+}
+
+void JsonReader::ProcessMapStatRequest(json::Builder& node, const json::Dict& request) {
+	using namespace std::literals;
+	const auto& request_id = request.at("id"s).AsInt();
+	json::Node value_node{ json::Builder{}.StartDict()
+				.Key("request_id"s).Value(request_id)
+				.Key("map"s).Value(request_handler.RenderMap())
+				.EndDict().Build() };
+	node.Value(value_node);
+}
+
+void JsonReader::ProcessRouteStatRequest(json::Builder& node, const json::Dict& request) {
+	using namespace std::literals;
+	const auto& request_id = request.at("id"s).AsInt();
+	auto route = request_handler.FindPath(request.at("from"s).AsString(), request.at("to"s).AsString());
+	if (route != std::nullopt) {
+		// задействованные маршруты в найденном пути
+		json::Array routes;
+		for (const auto& item : (*route).items) {
+			// пересадка
+			if (item.IsWait()) {
+				auto wait = item.AsWait();
+				json::Node item_node{ json::Builder{}.StartDict()
+							.Key("type"s).Value(std::string(wait.type_))
+							.Key("stop_name"s).Value(std::string(wait.stop_name_))
+							.Key("time"s).Value(wait.time_)
+							.EndDict().Build() };
+				routes.push_back(item_node);
+			}
+			// движение по маргруту
+			else if (item.IsBus()) {
+				auto bus = item.AsBus();
+				json::Node item_node{ json::Builder{}.StartDict()
+							.Key("type"s).Value(std::string(bus.type_))
+							.Key("bus"s).Value(std::string(bus.bus_))
+							.Key("span_count"s).Value(bus.span_count_)
+							.Key("time"s).Value(bus.time_)
+							.EndDict().Build() };
+				routes.push_back(item_node);
+			}
+		}
+		// вывод пути между остановками по маршрутам с пересадками
+		json::Node value_node{ json::Builder{}.StartDict()
+					.Key("request_id"s).Value(request_id)
+					.Key("total_time"s).Value((*route).total_time)
+					.Key("items"s).Value(routes)
+					.EndDict().Build() };
+		node.Value(value_node);
+	}
+	// пути между остановками нет
+	else {
+		json::Node value_node{ json::Builder{}.StartDict()
+					.Key("request_id"s).Value(request_id)
+					.Key("error_message"s).Value("not found"s)
+					.EndDict().Build() };
+		node.Value(value_node);
+	}
+}
+
 json::Document JsonReader::ProcessStatRequests() {
 	using namespace std::literals;
 	const auto& stat_requests = doc_.GetRoot().AsDict().at("stat_requests"s);
@@ -188,105 +295,18 @@ json::Document JsonReader::ProcessStatRequests() {
 
 	for (const auto& stat_request : stat_requests.AsArray()) {
 		const auto& request = stat_request.AsDict();
-		const auto& request_id = request.at("id"s).AsInt();
 		const auto& type = request.at("type"s);
-
-		// foo
 		if (type == "Bus"s) {
-			std::string name = request.at("name"s).AsString();
-			auto route_data = request_handler.GetBusStat(name);
-			if (route_data != std::nullopt) {
-				json::Node value_node{ json::Builder{}.StartDict()
-						.Key("request_id"s).Value(request_id)
-						.Key("curvature"s).Value((*route_data)->curvature)
-						.Key("route_length"s).Value((*route_data)->length)
-						.Key("stop_count"s).Value(static_cast<int>((*route_data)->stops_count))
-						.Key("unique_stop_count"s).Value(static_cast<int>((*route_data)->unique_stops_count))
-						.EndDict().Build() };
-				node.Value(value_node);
-			}
-			else {
-				json::Node value_node{ json::Builder{}.StartDict()
-							.Key("request_id"s).Value(request_id)
-							.Key("error_message"s).Value("not found"s)
-							.EndDict().Build() };
-				node.Value(value_node);
-			}
+			ProcessBusStatRequest(node, request);
 		}
-
-		// foo
-		if (type == "Stop"s) {
-			std::string name = request.at("name"s).AsString();
-			const auto& stop_data = request_handler.GetStopStat(name);
-			if (stop_data != std::nullopt) {
-				json::Array routes;
-				for (const auto& route_data : **request_handler.GetBusesByStop((*stop_data)->name)) {
-					routes.push_back(route_data->name);
-				}
-				json::Node value_node{ json::Builder{}.StartDict()
-							.Key("request_id"s).Value(request_id)
-							.Key("buses"s).Value(routes)
-							.EndDict().Build() };
-				node.Value(value_node);
-			}
-			else {
-				json::Node value_node{ json::Builder{}.StartDict()
-							.Key("request_id"s).Value(request_id)
-							.Key("error_message"s).Value("not found"s)
-							.EndDict().Build() };
-				node.Value(value_node);
-			}
+		else if (type == "Stop"s) {
+			ProcessStopStatRequest(node, request);
 		}
-
-		// foo
-		if (type == "Map"s) {
-			json::Node value_node{ json::Builder{}.StartDict()
-						.Key("request_id"s).Value(request_id)
-						.Key("map"s).Value(request_handler.RenderMap())
-						.EndDict().Build() };
-			node.Value(value_node);
+		else if (type == "Map"s) {
+			ProcessMapStatRequest(node, request);
 		}
-
-		// foo
-		if (type == "Route"s) {
-			auto route = request_handler.FindPath(request.at("from"s).AsString(), request.at("to"s).AsString());
-			if (route != std::nullopt) {
-				json::Array routes;
-				for (const auto& item : (*route).items) {
-					if (item.IsWait()) {
-						auto wait = item.AsWait();
-						json::Node item_node{ json::Builder{}.StartDict()
-									.Key("type"s).Value(std::string(wait.type_))
-									.Key("stop_name"s).Value(std::string(wait.stop_name_))
-									.Key("time"s).Value(wait.time_)
-									.EndDict().Build() };
-						routes.push_back(item_node);
-					}
-					else if (item.IsBus()) {
-						auto bus = item.AsBus();
-						json::Node item_node{ json::Builder{}.StartDict()
-									.Key("type"s).Value(std::string(bus.type_))
-									.Key("bus"s).Value(std::string(bus.bus_))
-									.Key("span_count"s).Value(bus.span_count_)
-									.Key("time"s).Value(bus.time_)
-									.EndDict().Build() };
-						routes.push_back(item_node);
-					}
-				}
-				json::Node value_node{ json::Builder{}.StartDict()
-							.Key("request_id"s).Value(request_id)
-							.Key("total_time"s).Value((*route).total_time)
-							.Key("items"s).Value(routes)
-							.EndDict().Build() };
-				node.Value(value_node);
-			}
-			else {
-				json::Node value_node{ json::Builder{}.StartDict()
-							.Key("request_id"s).Value(request_id)
-							.Key("error_message"s).Value("not found"s)
-							.EndDict().Build() };
-				node.Value(value_node);
-			}
+		else if (type == "Route"s) {
+			ProcessRouteStatRequest(node, request);
 		}
 	}
 	node.EndArray();

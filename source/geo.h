@@ -1,10 +1,11 @@
 ﻿#pragma once
-//функции для работы с географическими координатами
+
 #include "svg.h"
 #include <cmath>
 #include <iostream>
 #include <algorithm>
 
+//функции для работы с географическими координатами
 namespace geo {
 
 	/// @brief радиус Земли

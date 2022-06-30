@@ -1,6 +1,7 @@
 #include "request_handler.h"
 #include <sstream>
 #include <memory>
+//#include <fstream>
 /*
  * Здесь можно было бы разместить код обработчика запросов к базе, содержащего логику, которую не
  * хотелось бы помещать ни в transport_catalogue, ни в json reader.
@@ -30,10 +31,11 @@ namespace request_handler {
 	std::string RequestHandler::RenderMap() const {
 		std::ostringstream strm_svg;
 		map_renderer_.RenderMap(strm_svg);
+		//std::ofstream log_svg("log.svg");
+		//log_svg << strm_svg.str();
 		return strm_svg.str();
 	}
 
-	// optional
 	std::optional<const std::set<const domain::RouteData*, domain::PointerRouteDataCompareLow>*> RequestHandler::GetBusesByStop(std::string_view stop_name) const {
 		const auto stop_data = transport_catalogue_.GetStop(stop_name);
 		if (stop_data != nullptr) {

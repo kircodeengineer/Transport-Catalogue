@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ranges.h"
-
 #include <cstdlib>
 #include <vector>
 

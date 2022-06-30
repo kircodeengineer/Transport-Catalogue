@@ -1,5 +1,7 @@
 #pragma once
+
 #include "json.h"
+#include "json_builder.h"
 #include "request_handler.h"
 /*
  * Здесь можно разместить код наполнения транспортного справочника данными из JSON,
@@ -56,4 +58,24 @@ private:
 	/// @brief Обработка запросов на вывод информации
 	/// @return json-документ для печати
 	json::Document ProcessStatRequests();
+
+	/// @brief Обработка запроса на вывод информации о маршруте
+	/// @param Заполняемая нода (блок) json-докмента
+	/// @param Запрос
+	void ProcessBusStatRequest(json::Builder& node, const json::Dict& request);
+
+	/// @brief Обработка запроса на вывод информации об остановке
+	/// @param Заполняемая нода (блок) json-докмента
+	/// @param Запрос
+	void ProcessStopStatRequest(json::Builder& node, const json::Dict& request);
+
+	/// @brief Обработка запроса на вывод карты маршрутов
+	/// @param Заполняемая нода (блок) json-докмента
+	/// @param Запрос
+	void ProcessMapStatRequest(json::Builder& node, const json::Dict& request);
+
+	/// @brief Обработка запроса на вывод найденного пути между остановками
+	/// @param Заполняемая нода (блок) json-докмента
+	/// @param Запрос
+	void ProcessRouteStatRequest(json::Builder& node, const json::Dict& request);
 };

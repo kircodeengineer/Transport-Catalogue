@@ -23,7 +23,8 @@ namespace map_renderer {
 
 namespace request_handler {
 	/// @brief Класс RequestHandler играет роль Фасада, упрощающего взаимодействие JSON reader-а с другими подсистемами приложения.
-	/// @details См. паттерн проектирования Фасад: https://ru.wikipedia.org/wiki/Фасад_(шаблон_проектирования)
+	/// @details Обработчик запросов к базе, содержащего логику, которую не хотелось бы помещать ни в transport_catalogue, ни в json reader
+	/// См. паттерн проектирования Фасад: https://ru.wikipedia.org/wiki/Фасад_(шаблон_проектирования)
 	class RequestHandler {
 	public:
 		RequestHandler();
